@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_final_project/pages/home_page.dart';
-import 'package:flutter_final_project/states/username_cubit.dart';
+
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter_final_project/states/websocket_channel_cubit.dart';
+import 'package:web_socket_channel/io.dart';
+import 'package:web_socket_channel/web_socket_channel.dart';
+import 'dart:convert';
 
 class UsernamePage extends StatefulWidget {
-  const UsernamePage({Key? key}) : super(key: key);
+  final WebSocketChannel channel =
+      IOWebSocketChannel.connect('ws://besquare-demo.herokuapp.com');
 
   @override
   State<UsernamePage> createState() => _UsernamePageState();
@@ -16,7 +21,7 @@ class _UsernamePageState extends State<UsernamePage> {
   @override
   Widget build(BuildContext context) {
     return BlocProvider(
-      create: (context) => UsernameCubit(),
+      create: (context) => WebSocketChannelCubit(),
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Username Page'),
@@ -33,23 +38,38 @@ class _UsernamePageState extends State<UsernamePage> {
                   labelText: 'Name',
                 ),
               ),
-              BlocConsumer<UsernameCubit, String>(
-                listener: (context, state) {
-                  // TODO: implement listener
-                },
+              BlocBuilder<WebSocketChannelCubit, WebSocketChannel>(
                 builder: (context, state) {
-                  return ElevatedButton(
-                      onPressed: () {
-                        context
-                            .read<UsernameCubit>()
-                            .setUsername(usernameController.text);
-                        print(state);
-                        Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                                builder: (context) => HomePage()));
-                      },
-                      child: const Text('Enter The Application'));
+                  return StreamBuilder(
+                      stream: state.stream,
+                      builder: (context, snapshot) {
+                        return ElevatedButton(
+                            onPressed: () {
+                              if (usernameController.text.isNotEmpty) {
+                                state.sink.add(
+                                    '{"type": "sign_in", "data": {"name": "${usernameController.text}"}}');
+                              }
+                              var response =
+                                  jsonDecode(snapshot.data.toString())?['data']
+                                      ['response'];
+
+                              print(response);
+                              if (response == "OK") {
+                                context
+                                    .read<WebSocketChannelCubit>()
+                                    .getPosts();
+                                Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                        builder: (context) => BlocProvider(
+                                              create: (context) =>
+                                                  WebSocketChannelCubit(),
+                                              child: HomePage(),
+                                            )));
+                              }
+                            },
+                            child: const Text('Enter The Application'));
+                      });
                 },
               )
             ],
@@ -58,4 +78,13 @@ class _UsernamePageState extends State<UsernamePage> {
       ),
     );
   }
+
+  @override
+  void dispose() {
+    widget.channel.sink.close();
+    super.dispose();
+  }
 }
+
+
+//jsonDecode(snapshot.data.toString())['data'] ['response']
